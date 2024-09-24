@@ -1,0 +1,1 @@
+# plugins-wp-events-manager-woocommerce-payment-methods-integration
