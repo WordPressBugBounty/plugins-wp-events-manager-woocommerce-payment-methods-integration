@@ -23,15 +23,29 @@ class WPEMS_WC_Checkout extends WPEMS_Booking {
 		/**
 		 * woo add new order hook
 		 */
-		add_action( 'woocommerce_checkout_update_order_meta', array( $this, 'woo_add_order' ) );
+		// add_action( 'woocommerce_checkout_update_order_meta', array( $this, 'woo_add_order_classic' ) );
+		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'woo_add_order_store_api' ) );
+		add_action( 'woocommerce_checkout_order_processed', array( $this, 'woo_add_order_classic' ), 10, 4 );
 	}
-
+	/**
+	 * Use for classic checkout page
+	 * @param  integer $order_id Woocommerce order id
+	 */
+	public function woo_add_order_classic( $order_id ) {
+		$this->woo_add_order( $order_id );
+	}
+	/**
+	 * Use for blocks checkout page
+	 * @param  WC_Order $order woocommerce order
+	 */
+	public function woo_add_order_store_api( $order ) {
+		$order_id = $order->get_id();
+		$this->woo_add_order( $order_id );
+	}
 	/**
 	 * woo_add_order WooCoommerce hook create new order
 	 *
-	 * @param  [type] $order_id [description]
-	 *
-	 * @return [type]           [description]
+	 * @param  integer $order_id Woocommerce order id
 	 */
 	public function woo_add_order( $order_id ) {
 
@@ -48,10 +62,11 @@ class WPEMS_WC_Checkout extends WPEMS_Booking {
 					'price'      => $cart_content['line_total'],
 					'payment_id' => 'woo_payment',
 				);
-				if ( $booking = $this->create_booking( $args, 'woo_payment' ) ) {
+				$booking = $this->create_booking( $args, 'woo_payment' );
+				if ( $booking ) {
 					update_post_meta( $booking, '_tp_event_woo_order', $order_id );
 					$wc_order = wc_get_order( $order_id );
-					$wc_order->add_meta_data('_tp_event_event_order', $booking );
+					$wc_order->add_meta_data( '_tp_event_event_order', $booking );
 					$wc_order->save_meta_data();
 					// deprecated because add_post_meta is old method
 					// add_post_meta( $order_id, '_tp_event_event_order', $booking );
@@ -59,19 +74,6 @@ class WPEMS_WC_Checkout extends WPEMS_Booking {
 				continue;
 			}
 		}
-
-		/*if ( $create === true ) {
-			$old_order = get_post_meta( $order_id, '_tp_event_event_order', true );
-			if ( $old_order ) {
-				wp_delete_post( $old_order, true );
-			}
-			if ( $booking = $this->create_booking( $args, 'woo_payment' ) ) {
-				update_post_meta( $booking, '_tp_event_woo_order', $order_id );
-				update_post_meta( $order_id, '_tp_event_event_order', $booking );
-				return true;
-			}
-		}*/
-		return;
 	}
 }
 

@@ -1,29 +1,26 @@
 <?php
-/*
-	Plugin Name: WP Events Manager - WooCommerce Payment Methods Integration
-	Description: Support paying for a booking with the payment methods provided by Woocommerce
-	Author: ThimPress
-	Version: 2.0.7.1
-	Author URI: http://thimpress.com/
-	Requires at least: 6.3
-	Tested up to: 6.6
-	WC tested up to: 8.4
-	Text Domain: wp-events-manager-woo
-	Domain Path: /languages/
- */
-
 /**
- * Prevent loading this file directly
+ * Plugin Name: WP Events Manager - WooCommerce Payment Methods Integration
+ * Description: Support paying for a booking with the payment methods provided by Woocommerce
+ * Author: ThimPress
+ * Version: 2.0.7.2
+ * Author URI: http://thimpress.com/
+ * Requires at least: 6.3
+ * Tested up to: 6.7.1
+ * WC tested up to: 8.4
+ * Text Domain: wp-events-manager-woo
+ * Domain Path: /languages/
+ * Require_WPEMS_Version: 2.0
  */
-
 use Automattic\WooCommerce\Utilities\FeaturesUtil;
 
 defined( 'ABSPATH' ) || exit;
 
+define( 'WPEMS_BASENAME', plugin_basename( __FILE__ ) );
+
 /*
  * Class WPEMS_Woo
  */
-
 class WPEMS_Woo {
 
 	/**
@@ -48,27 +45,75 @@ class WPEMS_Woo {
 	protected static $_notice;
 
 	/**
+	 * Addon info
+	 *
+	 * @var array
+	 */
+	public static $addon_info = array();
+
+	/**
 	 * WPEMS_Woo constructor
 	 */
-	public function __construct() {
+	private function __construct() {
+		$can_load = true;
+
+		// Set version addon for WPEMS check .
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		self::$addon_info = get_file_data(
+			__FILE__,
+			array(
+				'Name'                  => 'Plugin Name',
+				'Require_WPEMS_Version' => 'Require_WPEMS_Version',
+				'Version'               => 'Version',
+			)
+		);
+
+		define( 'WPEMS_WOO_VER', self::$addon_info['Version'] );
+		define( 'WPEMS_WOO_REQUIRE_VER', self::$addon_info['Require_WPEMS_Version'] );
+
+		// Check WPEMS activated .
+		if ( ! is_plugin_active( 'wp-events-manager/wp-events-manager.php' ) ) {
+			$can_load = false;
+		}
+		/*elseif ( version_compare( WPEMS_WOO_REQUIRE_VER, get_option( 'wpems_version', '2.0' ), '>=' ) ) {
+			$can_load = false;
+		}*/
+
+		if ( ! $can_load ) {
+			add_action( 'admin_notices', array( $this, 'show_note_errors_require_wpems' ) );
+			deactivate_plugins( LP_ADDON_WOO_PAYMENT_BASENAME );
+
+			if ( isset( $_GET['activate'] ) ) {
+				unset( $_GET['activate'] );
+			}
+
+			return;
+		}
+
+		// Check Woo activated .
+		if ( ! $this->check_woo_activated() ) {
+			return;
+		}
 
 		// define constants
 		$this->define_constants();
-		// load text domain
-		$this->load_text_domain();
 
-		if ( self::$_wc_loaded ) {
-			require_once WPEMS_WOO_INC . '/class-wpems-wc-settings.php';
-			require_once WPEMS_WOO_INC . '/class-wpems-wc-product.php';
-			require_once WPEMS_WOO_INC . '/class-wpems-wc-checkout.php';
-			require_once WPEMS_WOO_INC . '/class-wpems-wc-payment.php';
-			require_once WPEMS_WOO_INC . '/class-wpems-wc-product-order-item.php';
-
-			$this->init_hook();
-		}
+		$this->init_hook();
 	}
 
 	public function init_hook() {
+		add_action(
+			'init',
+			function () {
+				$this->load_text_domain();
+
+				require_once WPEMS_WOO_INC . '/class-wpems-wc-settings.php';
+				require_once WPEMS_WOO_INC . '/class-wpems-wc-product.php';
+				require_once WPEMS_WOO_INC . '/class-wpems-wc-checkout.php';
+				require_once WPEMS_WOO_INC . '/class-wpems-wc-payment.php';
+				require_once WPEMS_WOO_INC . '/class-wpems-wc-product-order-item.php';
+			}
+		);
 		// add event as woocommerce product
 		add_filter( 'woocommerce_product_class', array( $this, 'event_product_class' ), 10, 4 );
 		// add event product to cart
@@ -96,11 +141,14 @@ class WPEMS_Woo {
 
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 
-		add_action( 'before_woocommerce_init', function() {
-			if ( class_exists( FeaturesUtil::class ) ) {
-				FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__ );
+		add_action(
+			'before_woocommerce_init',
+			function () {
+				if ( class_exists( FeaturesUtil::class ) ) {
+					FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__ );
+				}
 			}
-		} );
+		);
 	}
 
 	/**
@@ -210,25 +258,18 @@ class WPEMS_Woo {
 		if ( ! $wc_order ) {
 			return;
 		}
-		$new_status       = $wc_order->get_status();
+		$new_status = $wc_order->get_status();
 		if ( ! in_array( $new_status, array( 'completed', 'pending', 'processing', 'cancelled' ) ) ) {
 			$new_status = 'pending';
 		}
 		$wc_order_meta_items = $wc_order->get_meta( '_tp_event_event_order', false );
-		if (! empty( $wc_order_meta_items ) ) {
-			foreach ($wc_order_meta_items as $item) {
+		if ( ! empty( $wc_order_meta_items ) ) {
+			foreach ( $wc_order_meta_items as $item ) {
 				$booking_data = $item->get_data();
 				if ( ! empty( $booking_data['value'] ) ) {
-					WPEMS_Booking::instance( $booking_data['value'] )->update_status( 'ea-' . $new_status );
+					WPEMS_Booking::instance( (int) $booking_data['value'] )->update_status( 'ea-' . $new_status );
 				}
 			}
-			// if ( is_array( $event_booking_id ) ) {
-			// 	foreach ( $event_booking_id as $event_id ) {
-			// 		WPEMS_Booking::instance( $event_id )->update_status( 'ea-' . $new_status );
-			// 	}
-			// } else {
-			// 	WPEMS_Booking::instance( $event_booking_id )->update_status( 'ea-' . $new_status );
-			// }
 		}
 	}
 
@@ -240,9 +281,6 @@ class WPEMS_Woo {
 		define( 'WPEMS_WOO_URI', plugin_dir_url( __FILE__ ) );
 		define( 'WPEMS_WOO_INC', WPEMS_WOO_PATH . 'inc/' );
 		define( 'WPEMS_WOO_ASSETS_URI', WPEMS_WOO_URI . 'assets/' );
-		define( 'WPEMS_WOO_VER', '2.0.4' );
-		define( 'WPEMS_WOO_REQUIRE_VER', '2.0' );
-		define( 'WPEMS_WOO_MAIN_FILE', __FILE__ );
 	}
 
 	/**
@@ -261,66 +299,6 @@ class WPEMS_Woo {
 		} else {
 			load_textdomain( $text_domain, WPEMS_WOO_PATH . '/languages/' . $mo_file );
 		}
-	}
-
-	/**
-	 * Plugin load
-	 */
-	public static function load() {
-
-		if ( ! function_exists( 'is_plugin_active' ) ) {
-			include_once ABSPATH . 'wp-admin/includes/plugin.php';
-		}
-		// check TP Event plugin activated
-		if ( class_exists( 'WPEMS' ) && ( is_plugin_active( 'wp-events-manager/wp-events-manager.php' ) || is_plugin_active( 'WP-Events-Manager/wp-events-manager.php' ) ) ) {
-			if ( WPEMS_VER < 2 || ! WPEMS_VER ) {
-				self::$_wc_loaded = false;
-				self::$_notice    = 'required_update_wpems';
-			} else {
-				self::$_wc_loaded = true;
-			}
-		} else {
-			self::$_notice = 'required_active_wpems';
-		}
-
-		// check Woocommerce activated
-		if ( self::$_wc_loaded && is_plugin_active( 'woocommerce/woocommerce.php' ) ) {
-			self::$_wc_loaded = true;
-		} else {
-			self::$_wc_loaded = false;
-			if ( ! self::$_notice ) {
-				self::$_notice = 'required_active_woo';
-			}
-		}
-
-		WPEMS_Woo::instance();
-
-		if ( ! self::$_wc_loaded ) {
-			add_action( 'admin_notices', array( __CLASS__, 'admin_notice' ) );
-		}
-	}
-
-	/*
-	 * Show admin notice when active plugin
-	 */
-	public static function admin_notice() {
-		?>
-		<div class="error">
-			<?php
-			switch ( self::$_notice ) {
-				case 'required_active_wpems':
-					echo '<p>' . __( wp_kses( '<strong>WP Events Manager - WooCommerce Payment Methods Integration</strong> requires <strong>WP Events Manager</strong> is activated. Please install and active it before you can using this add-on.', array( 'strong' => array() ) ), 'wp-events-manager-woo' ) . '</p>';
-					break;
-				case 'required_update_wpems':
-					echo '<p>' . sprintf( __( wp_kses( '<strong>WP Events Manager - WooCommerce Payment Methods Integration</strong> requires <strong>WP Events Manager</strong> version <strong>%s</strong> or higher.', array( 'strong' => array() ), 'wp-events-manager-woo' ) ), WPEMS_WOO_REQUIRE_VER ) . '</p>';
-					break;
-				case 'required_active_woo':
-					echo '<p>' . sprintf( __( wp_kses( 'WP Events Manager - WooCommerce Payment Methods Integration requires <a href="%s">WooCommerce</a> is activated. Please install and active it before you can using this add-on.', array( 'a' => array( 'href' => array() ) ) ), 'wp-events-manager-woo' ), 'http://wordpress.org/plugins/woocommerce' ) . '</p>';
-					break;
-			}
-			?>
-		</div>
-		<?php
 	}
 
 	/**
@@ -367,6 +345,72 @@ class WPEMS_Woo {
 
 		return self::$_instance;
 	}
+
+	/**
+	 * Check plugin Woo activated.
+	 */
+	public function check_woo_activated(): bool {
+		if ( ! is_plugin_active( 'woocommerce/woocommerce.php' ) ) {
+			add_action( 'admin_notices', array( $this, 'show_note_errors_install_plugin_woo' ) );
+
+			deactivate_plugins( WPEMS_BASENAME );
+
+			if ( isset( $_GET['activate'] ) ) {
+				unset( $_GET['activate'] );
+			}
+
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Check activated plugin WP Events Manager
+	 *
+	 * @return void
+	 */
+	public function show_note_errors_require_wpems() {
+		?>
+		<div class="notice notice-error">
+			<p>
+				<?php
+				printf(
+					esc_html__( 'Please active %1$s before active %2$s', 'wp-events-manager-woo' ),
+					'<strong>LP version ' . WPEMS_WOO_REQUIRE_VER . ' or later</strong>',
+					'<strong>' . self::$addon_info['Name'] . '</strong>'
+				);
+				?>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Check activated plugin WooCommerce
+	 *
+	 * @since 2.0.7
+	 * @version 1.0.0
+	 * @return void
+	 */
+	public function show_note_errors_install_plugin_woo() {
+		?>
+		<div class="notice notice-error">
+			<p>
+				<?php
+				printf(
+					esc_html__( 'Please active plugin %1$s before active plugin %2$s', 'wp-events-manager-woo' ),
+					sprintf(
+						'<strong><a href="%s" target="_blank">%s</a></strong>',
+						admin_url( 'plugin-install.php?tab=plugin-information&plugin=woocommerce' ),
+						'WooCommerce'
+					),
+					'<strong>LearnPress - Woo payment</strong>'
+				);
+				?>
+			</p>
+		</div>
+		<?php
+	}
 }
 
-add_action( 'plugins_loaded', array( 'WPEMS_Woo', 'load' ) );
+WPEMS_Woo::instance();
