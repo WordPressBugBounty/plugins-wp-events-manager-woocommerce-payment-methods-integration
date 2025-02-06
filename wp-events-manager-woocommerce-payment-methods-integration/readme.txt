@@ -1,10 +1,10 @@
 === WP Events Manager WooCommerce ===
 Contributors: thimpress, leehld, phamtungpth
 Donate link: https://thimpress.com/
-Tags: event, event management, events, registration, bookings, tickets, woocommerce
+Tags: event, event management, events, registration, bookings
 Requires at least: 6.3
-Tested up to: 6.4.2
-Stable tag: 2.0.7.1
+Tested up to: 6.7
+Stable tag: 2.0.7.3
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -37,6 +37,9 @@ WP Events Manager Woocommerce supports paying for booking of WP Events Manager p
 == Screenshots ==
 
 == Changelog ==
+
+= 2.0.7.3 (2024-02-06) =
++ Fixed: minor bug.
 
 = 2.0.7.2 (2024-12-20) =
 + Tweak: create order on blocks checkout and classic checkout.

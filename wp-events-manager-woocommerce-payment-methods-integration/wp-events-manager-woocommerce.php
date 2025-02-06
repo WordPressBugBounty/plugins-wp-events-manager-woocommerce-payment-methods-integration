@@ -3,10 +3,9 @@
  * Plugin Name: WP Events Manager - WooCommerce Payment Methods Integration
  * Description: Support paying for a booking with the payment methods provided by Woocommerce
  * Author: ThimPress
- * Version: 2.0.7.2
+ * Version: 2.0.7.3
  * Author URI: http://thimpress.com/
  * Requires at least: 6.3
- * Tested up to: 6.7.1
  * WC tested up to: 8.4
  * Text Domain: wp-events-manager-woo
  * Domain Path: /languages/
@@ -70,6 +69,7 @@ class WPEMS_Woo {
 
 		define( 'WPEMS_WOO_VER', self::$addon_info['Version'] );
 		define( 'WPEMS_WOO_REQUIRE_VER', self::$addon_info['Require_WPEMS_Version'] );
+		define( 'WPEMS_WOO_BASENAME', plugin_basename( __FILE__ ) );
 
 		// Check WPEMS activated .
 		if ( ! is_plugin_active( 'wp-events-manager/wp-events-manager.php' ) ) {
@@ -81,7 +81,7 @@ class WPEMS_Woo {
 
 		if ( ! $can_load ) {
 			add_action( 'admin_notices', array( $this, 'show_note_errors_require_wpems' ) );
-			deactivate_plugins( LP_ADDON_WOO_PAYMENT_BASENAME );
+			deactivate_plugins( WPEMS_WOO_BASENAME );
 
 			if ( isset( $_GET['activate'] ) ) {
 				unset( $_GET['activate'] );
